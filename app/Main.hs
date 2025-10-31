@@ -1,61 +1,45 @@
 module Main (main) where
-
 import Data.Time.Clock (getCurrentTime, diffUTCTime)
 import Text.Printf (printf)
 import Control.Exception (evaluate)
+import Integration.Sequential (integrateEpsilon)
+import Integration.Parallel (parIntegrateEpsilon)
 
-import Integration.Sequential (integrate)
-import Integration.Parallel (parIntegrate)
-
--- Наша функція, яку ми будемо інтегрувати.
 f :: Double -> Double
-f x = sin x
--- f x = x * x -- інший варіант для тесту
+f x = sin x * cos x * exp (x / 1000) / (1 + x * x)  -- Складніша функція
 
-a_const :: Double
-a_const = 0.0 -- Початок інтервалу
-
-b_const :: Double
-b_const = 100.0 -- Кінець інтервалу 
-
-n_const :: Int
-n_const = 20000000 -- Кількість кроків (точність).
+a_const, b_const, epsilon :: Double
+a_const = 0.0
+b_const = 6000.0
+epsilon = 1e-8  -- Менша epsilon = більше кроків
 
 numCores :: Int
-numCores = 8 -- Змініть на кількість ваших фізичних ядер
-
+numCores = 8
 
 main :: IO ()
 main = do
-    putStrLn "--- Haskell Parallel Integral Calculation ---"
-    printf "Function: sin(x)\nInterval: [%.1f, %.1f]\nSteps: %d\n" a_const b_const n_const
-    putStrLn "---------------------------------------------"
-
-    -- --- Послідовний запуск ---
-    putStrLn $ "Running sequential version (1 core)..."
-    startTimeSeq <- getCurrentTime
-
-    let resultSeq = integrate f a_const b_const n_const
+    putStrLn "--- Haskell Parallel Integral (Epsilon-based) ---"
+    printf "Function: sin(x)\nInterval: [%.1f, %.1f]\nEpsilon: %e\n" a_const b_const epsilon
+    putStrLn "------------------------------------------------"
+    
+    -- Послідовний
+    putStrLn "Running sequential version..."
+    startSeq <- getCurrentTime
+    let (resultSeq, stepsSeq) = integrateEpsilon f a_const b_const epsilon
     _ <- evaluate resultSeq
+    endSeq <- getCurrentTime
+    printf "Sequential: %f (steps: %d)\n" resultSeq stepsSeq
+    printf "Time: %s\n\n" (show (diffUTCTime endSeq startSeq))
     
-    endTimeSeq <- getCurrentTime
-    printf "Sequential result: %f\n" resultSeq
-    printf "Sequential time:   %s\n\n" (show (diffUTCTime endTimeSeq startTimeSeq))
-
-
-    -- --- Паралельний запуск ---
+    -- Паралельний
     putStrLn $ "Running parallel version (" ++ show numCores ++ " cores)..."
-    startTimePar <- getCurrentTime
-
-    let resultPar = parIntegrate numCores f a_const b_const n_const
+    startPar <- getCurrentTime
+    let (resultPar, stepsPar) = parIntegrateEpsilon numCores f a_const b_const epsilon
     _ <- evaluate resultPar
+    endPar <- getCurrentTime
+    printf "Parallel: %f (steps: %d)\n" resultPar stepsPar
+    printf "Time: %s\n" (show (diffUTCTime endPar startPar))
     
-    endTimePar <- getCurrentTime
-    printf "Parallel result:   %f\n" resultPar
-    printf "Parallel time:     %s\n" (show (diffUTCTime endTimePar startTimePar))
-    putStrLn "---------------------------------------------"
-
-    -- --- Демонстрація ефективності ---
-    let timeSeq = realToFrac (diffUTCTime endTimeSeq startTimeSeq) :: Double
-    let timePar = realToFrac (diffUTCTime endTimePar startTimePar) :: Double
-    printf "Speedup: %.2fx\n" (timeSeq / timePar)
+    let timeSeq = realToFrac (diffUTCTime endSeq startSeq) :: Double
+    let timePar = realToFrac (diffUTCTime endPar startPar) :: Double
+    printf "\nSpeedup: %.2fx\n" (timeSeq / timePar)
